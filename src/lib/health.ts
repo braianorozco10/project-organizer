@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 
 import { db } from "./db";
 import { oauthSessions } from "./db/schema";
+import { pgErrorCode } from "./pg-error";
 
 /**
  * Confirms the configured database is actually usable, rather than merely
@@ -19,15 +20,14 @@ export async function databaseProblem(): Promise<string | null> {
     await db.select({ present: sql<number>`1` }).from(oauthSessions).limit(1);
     return null;
   } catch (error) {
-    const code = (error as { code?: string }).code;
     const message = error instanceof Error ? error.message : String(error);
 
-    // 42P01 = undefined_table
-    if (code === "42P01" || /relation .* does not exist/i.test(message)) {
-      return "the database is reachable but has no tables — run `npm run db:migrate` against it";
-    }
     if (/DATABASE_URL is not set/.test(message)) {
       return "DATABASE_URL is not set";
+    }
+    // 42P01 = undefined_table: connected fine, but nobody migrated this database.
+    if (pgErrorCode(error) === "42P01" || /relation .* does not exist/i.test(message)) {
+      return "the database is reachable but has no tables — run `npm run db:migrate` against it";
     }
     return "the database could not be reached — check DATABASE_URL points at a live database";
   }

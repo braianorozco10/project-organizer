@@ -9,6 +9,7 @@ import { db } from "./db";
 import { projects, tasks } from "./db/schema";
 import { requireActiveSession, requireSession } from "./data";
 import { JiraError, fetchIssue, fetchIssues, issueUrl, parseIssueKey } from "./jira";
+import { pgConstraint, pgErrorCode } from "./pg-error";
 import { destroySession, ownerKey, selectSite } from "./session";
 
 export type ActionState = { error?: string; message?: string };
@@ -19,20 +20,10 @@ function fail(error: string): ActionState {
   return { error };
 }
 
-/**
- * Postgres reports a unique violation as SQLSTATE 23505. Drivers wrap the
- * original error, so walk the cause chain rather than string-matching a message.
- */
 function isUniqueViolation(error: unknown, constraint: string): boolean {
-  let current = error;
-  for (let depth = 0; current && depth < 5; depth += 1) {
-    const candidate = current as { code?: string; constraint?: string; cause?: unknown };
-    if (candidate.code === "23505") {
-      return !candidate.constraint || candidate.constraint === constraint;
-    }
-    current = candidate.cause;
-  }
-  return false;
+  if (pgErrorCode(error) !== "23505") return false;
+  const actual = pgConstraint(error);
+  return !actual || actual === constraint;
 }
 
 /** Confirms the project exists and belongs to the caller. Returns the owner key. */
