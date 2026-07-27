@@ -20,7 +20,21 @@ export class AtlassianError extends Error {
 }
 
 export function isConfigured(): boolean {
-  return Boolean(process.env.ATLASSIAN_CLIENT_ID && process.env.ATLASSIAN_CLIENT_SECRET);
+  return missingConfig().length === 0;
+}
+
+/**
+ * Which required environment variables are absent. Surfaced on the login page so
+ * a fresh deployment says what it needs instead of just refusing to be clicked.
+ */
+export function missingConfig(): string[] {
+  const required = [
+    "ATLASSIAN_CLIENT_ID",
+    "ATLASSIAN_CLIENT_SECRET",
+    "SESSION_SECRET",
+    "DATABASE_URL",
+  ];
+  return required.filter((name) => !process.env[name]);
 }
 
 function credentials(): { clientId: string; clientSecret: string } {

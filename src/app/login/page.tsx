@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { ThemeToggle } from "@/components/theme-toggle";
-import { isConfigured } from "@/lib/atlassian";
+import { missingConfig } from "@/lib/atlassian";
 import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Sign in · Project Organizer" };
@@ -25,8 +25,12 @@ export default async function LoginPage({
   if (session) redirect(session.cloudId ? "/projects" : "/select-site");
 
   const { error } = await searchParams;
-  const message = error ? (ERRORS[error] ?? ERRORS.atlassian) : null;
-  const configured = isConfigured();
+  const missing = missingConfig();
+  const configured = missing.length === 0;
+  // A misconfigured deployment explains itself; not_configured would be noise on top.
+  const message = error && !(error === "not_configured" && !configured)
+    ? (ERRORS[error] ?? ERRORS.atlassian)
+    : null;
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-6 py-12">
@@ -48,6 +52,23 @@ export default async function LoginPage({
               {message}
             </p>
           ) : null}
+
+          {configured ? null : (
+            <div className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-3 py-3 text-sm">
+              <p className="font-medium text-danger">This deployment is not configured yet.</p>
+              <p className="mt-1.5 text-muted">
+                Add {missing.length === 1 ? "this variable" : "these variables"} in Vercel under
+                Settings → Environment Variables, then redeploy:
+              </p>
+              <ul className="mt-2 space-y-1">
+                {missing.map((name) => (
+                  <li key={name} className="font-mono text-xs text-foreground">
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           <a
             href="/api/auth/login"
