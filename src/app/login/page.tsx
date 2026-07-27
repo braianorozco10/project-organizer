@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { missingConfig } from "@/lib/atlassian";
+import { databaseProblem } from "@/lib/health";
 import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Sign in · Project Organizer" };
@@ -28,6 +29,9 @@ export default async function LoginPage({
 
   const { error } = await searchParams;
   const missing = missingConfig();
+  // Only probe the database once the variables it needs are actually present.
+  const dbProblem = missing.length === 0 ? await databaseProblem() : null;
+  if (dbProblem) missing.push(dbProblem);
   const configured = missing.length === 0;
   // A misconfigured deployment explains itself; not_configured would be noise on top.
   const message = error && !(error === "not_configured" && !configured)
