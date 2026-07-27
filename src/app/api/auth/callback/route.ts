@@ -52,6 +52,11 @@ export async function GET(request: Request) {
     return response;
   } catch (error) {
     if (error instanceof AtlassianError) return failure(origin, "atlassian");
-    throw error;
+
+    // Anything else — a missing table, an unusable SESSION_SECRET — used to
+    // surface as a bare 500 with no way to tell what broke. Log it for the
+    // platform's runtime logs and send the user somewhere that explains itself.
+    console.error("[auth/callback] unexpected failure:", error);
+    return failure(origin, "server");
   }
 }

@@ -14,6 +14,8 @@ const ERRORS: Record<string, string> = {
   state: "That sign-in link expired or was tampered with. Try again.",
   no_sites: "That Atlassian account cannot reach any Jira sites.",
   atlassian: "Atlassian could not complete the sign-in. Try again in a moment.",
+  server:
+    "Sign-in failed inside this app rather than at Atlassian. Check the deployment's runtime logs for [auth/callback].",
 };
 
 export default async function LoginPage({
@@ -57,13 +59,13 @@ export default async function LoginPage({
             <div className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-3 py-3 text-sm">
               <p className="font-medium text-danger">This deployment is not configured yet.</p>
               <p className="mt-1.5 text-muted">
-                Add {missing.length === 1 ? "this variable" : "these variables"} in Vercel under
-                Settings → Environment Variables, then redeploy:
+                Fix {missing.length === 1 ? "this" : "these"} in Vercel under Settings →
+                Environment Variables, then redeploy:
               </p>
               <ul className="mt-2 space-y-1">
-                {missing.map((name) => (
-                  <li key={name} className="font-mono text-xs text-foreground">
-                    {name}
+                {missing.map((problem) => (
+                  <li key={problem} className="text-xs text-foreground">
+                    {problem}
                   </li>
                 ))}
               </ul>

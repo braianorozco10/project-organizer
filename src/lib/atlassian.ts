@@ -24,17 +24,32 @@ export function isConfigured(): boolean {
 }
 
 /**
- * Which required environment variables are absent. Surfaced on the login page so
- * a fresh deployment says what it needs instead of just refusing to be clicked.
+ * What is wrong with this deployment's configuration, in words. Surfaced on the
+ * login page so a half-set-up deployment says what it needs instead of failing
+ * later with an opaque 500.
+ *
+ * Checks validity, not just presence: a SESSION_SECRET that is too short passes
+ * every page that has no cookie to decrypt, then throws inside the OAuth
+ * callback where the error is far harder to trace back.
  */
 export function missingConfig(): string[] {
-  const required = [
+  const problems: string[] = [];
+
+  for (const name of [
     "ATLASSIAN_CLIENT_ID",
     "ATLASSIAN_CLIENT_SECRET",
     "SESSION_SECRET",
     "DATABASE_URL",
-  ];
-  return required.filter((name) => !process.env[name]);
+  ]) {
+    if (!process.env[name]) problems.push(`${name} is not set`);
+  }
+
+  const secret = process.env.SESSION_SECRET;
+  if (secret && secret.length < 32) {
+    problems.push(`SESSION_SECRET is only ${secret.length} characters — it needs at least 32`);
+  }
+
+  return problems;
 }
 
 function credentials(): { clientId: string; clientSecret: string } {
