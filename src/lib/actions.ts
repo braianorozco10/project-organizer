@@ -7,17 +7,9 @@ import { z } from "zod";
 
 import { db } from "./db";
 import { projects, tasks } from "./db/schema";
-import { requireSession } from "./data";
-import {
-  JiraError,
-  fetchIssue,
-  fetchIssues,
-  issueUrl,
-  normalizeSite,
-  parseIssueKey,
-  verifyCredentials,
-} from "./jira";
-import { createSession, destroySession, ownerKey } from "./session";
+import { requireActiveSession, requireSession } from "./data";
+import { JiraError, fetchIssue, fetchIssues, issueUrl, parseIssueKey } from "./jira";
+import { destroySession, ownerKey, selectSite } from "./session";
 
 export type ActionState = { error?: string; message?: string };
 
@@ -45,7 +37,7 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
 
 /** Confirms the project exists and belongs to the caller. Returns the owner key. */
 async function assertProjectOwner(projectId: string) {
-  const session = await requireSession();
+  const session = await requireActiveSession();
   const owner = ownerKey(session);
 
   const [project] = await db
@@ -60,47 +52,17 @@ async function assertProjectOwner(projectId: string) {
 
 // ---------------------------------------------------------------- auth
 
-const loginSchema = z.object({
-  site: z.string().min(1, "Enter your Jira site URL."),
-  email: z.email("Enter the email address on your Atlassian account."),
-  apiToken: z.string().min(1, "Paste your Jira API token."),
-});
+/**
+ * Signing in is a redirect to /api/auth/login, so the only auth action left is
+ * choosing which Jira site to work in when the grant covers more than one.
+ */
+export async function chooseSite(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const session = await requireSession();
+  const cloudId = String(formData.get("cloudId") ?? "");
 
-export async function login(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const parsed = loginSchema.safeParse({
-    site: formData.get("site"),
-    email: formData.get("email"),
-    apiToken: formData.get("apiToken"),
-  });
-
-  if (!parsed.success) {
-    return fail(parsed.error.issues[0]?.message ?? "Check the form and try again.");
-  }
-
-  let site: string;
-  try {
-    site = normalizeSite(parsed.data.site);
-  } catch {
-    return fail("That does not look like a valid URL. Try something like acme.atlassian.net.");
-  }
-
-  const credentials = {
-    site,
-    email: parsed.data.email.trim(),
-    apiToken: parsed.data.apiToken.trim(),
-  };
-
-  try {
-    const identity = await verifyCredentials(credentials);
-    await createSession({
-      ...credentials,
-      accountId: identity.accountId,
-      displayName: identity.displayName,
-      avatarUrl: identity.avatarUrl,
-    });
-  } catch (error) {
-    if (error instanceof JiraError) return fail(error.message);
-    return fail("Could not reach Jira. Check the site URL and your connection.");
+  if (!cloudId) return fail("Pick a site to continue.");
+  if (!(await selectSite(session.id, cloudId))) {
+    return fail("That site is not part of your Jira authorization.");
   }
 
   redirect("/projects");
@@ -117,7 +79,7 @@ export async function createProject(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSession();
+  const session = await requireActiveSession();
   const name = String(formData.get("name") ?? "").trim();
 
   if (!name) return fail("Give the project a name.");
@@ -193,7 +155,7 @@ export async function addTask(
   }
 
   // The pasted link may point at a board view; store the canonical browse URL.
-  const url = /^https?:\/\//i.test(input) ? input : issueUrl(session.site, issue.key);
+  const url = /^https?:\/\//i.test(input) ? input : issueUrl(session.siteUrl, issue.key);
 
   try {
     await db.insert(tasks).values({

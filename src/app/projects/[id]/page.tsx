@@ -32,6 +32,7 @@ export async function generateMetadata({
 export default async function ProjectPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) redirect("/login");
+  if (!session.cloudId) redirect("/select-site");
 
   const { id } = await params;
   // Guard before the query so a malformed id is a 404, not a Postgres error.

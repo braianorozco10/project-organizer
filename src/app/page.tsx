@@ -4,5 +4,6 @@ import { getSession } from "@/lib/session";
 
 export default async function Home() {
   const session = await getSession();
-  redirect(session ? "/projects" : "/login");
+  if (!session) redirect("/login");
+  redirect(session.cloudId ? "/projects" : "/select-site");
 }

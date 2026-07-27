@@ -1,12 +1,44 @@
 import {
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+/** One Jira site the signed-in account can reach, from accessible-resources. */
+export type AtlassianSite = {
+  cloudId: string;
+  url: string;
+  name: string;
+};
+
+/**
+ * Server-side half of a login. The cookie carries only this row's id, so
+ * rotating refresh tokens can be persisted from anywhere in the app.
+ */
+export const oauthSessions = pgTable(
+  "oauth_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: text("account_id").notNull(),
+    displayName: text("display_name").notNull(),
+    avatarUrl: text("avatar_url"),
+    /** Null until the account picks one, when it can reach more than one site. */
+    cloudId: text("cloud_id"),
+    siteUrl: text("site_url"),
+    siteName: text("site_name"),
+    sites: jsonb("sites").$type<AtlassianSite[]>().notNull().default([]),
+    accessToken: text("access_token").notNull(),
+    refreshToken: text("refresh_token"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("oauth_sessions_account_idx").on(table.accountId)],
+);
 
 export const projects = pgTable(
   "projects",
@@ -45,5 +77,6 @@ export const tasks = pgTable(
   ],
 );
 
+export type OAuthSession = typeof oauthSessions.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Task = typeof tasks.$inferSelect;

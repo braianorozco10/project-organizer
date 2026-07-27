@@ -1,14 +1,32 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { LoginForm } from "@/components/login-form";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { isConfigured } from "@/lib/atlassian";
 import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Sign in · Project Organizer" };
 
-export default async function LoginPage() {
-  if (await getSession()) redirect("/projects");
+const ERRORS: Record<string, string> = {
+  not_configured:
+    "This deployment has no Atlassian OAuth credentials yet. Set ATLASSIAN_CLIENT_ID and ATLASSIAN_CLIENT_SECRET.",
+  denied: "You declined the Jira authorization. Nothing was connected.",
+  state: "That sign-in link expired or was tampered with. Try again.",
+  no_sites: "That Atlassian account cannot reach any Jira sites.",
+  atlassian: "Atlassian could not complete the sign-in. Try again in a moment.",
+};
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const session = await getSession();
+  if (session) redirect(session.cloudId ? "/projects" : "/select-site");
+
+  const { error } = await searchParams;
+  const message = error ? (ERRORS[error] ?? ERRORS.atlassian) : null;
+  const configured = isConfigured();
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center px-6 py-12">
@@ -20,37 +38,54 @@ export default async function LoginPage() {
         <header className="mb-8 text-center">
           <h1 className="text-3xl font-semibold tracking-tight">Project Organizer</h1>
           <p className="mt-2 text-sm text-muted">
-            Sign in with your Jira credentials to pull ticket details automatically.
+            Group Jira tickets into projects and track completion at a glance.
           </p>
         </header>
 
         <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <LoginForm />
+          {message ? (
+            <p role="alert" className="mb-4 rounded-lg bg-danger/10 px-3 py-2 text-sm text-danger">
+              {message}
+            </p>
+          ) : null}
+
+          <a
+            href="/api/auth/login"
+            aria-disabled={!configured}
+            className={`flex w-full items-center justify-center gap-2.5 rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 dark:text-[#0e0f11] ${
+              configured ? "" : "pointer-events-none opacity-50"
+            }`}
+          >
+            Continue with Atlassian
+          </a>
+
+          <p className="mt-4 text-center text-xs text-muted">
+            You will be asked to grant read access to your Jira issues. No password or API token is
+            ever entered here.
+          </p>
         </div>
 
         <details className="mt-6 rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-muted">
           <summary className="cursor-pointer font-medium text-foreground">
-            Where do I get an API token?
+            What does this get access to?
           </summary>
-          <ol className="mt-3 list-decimal space-y-1.5 pl-5">
+          <ul className="mt-3 list-disc space-y-1.5 pl-5">
             <li>
-              Open{" "}
-              <a
-                className="text-accent underline underline-offset-2"
-                href="https://id.atlassian.com/manage-profile/security/api-tokens"
-                target="_blank"
-                rel="noreferrer"
-              >
-                id.atlassian.com → Security → API tokens
-              </a>
-              .
+              <code className="font-mono text-xs">read:jira-work</code> — issue titles, statuses and
+              update times.
             </li>
-            <li>Choose &ldquo;Create API token&rdquo; and give it a label.</li>
-            <li>Copy the token and paste it above.</li>
-          </ol>
+            <li>
+              <code className="font-mono text-xs">read:jira-user</code> — your display name, to show
+              who is signed in.
+            </li>
+            <li>
+              <code className="font-mono text-xs">offline_access</code> — keeps you signed in without
+              re-approving hourly.
+            </li>
+          </ul>
           <p className="mt-3">
-            Your token is encrypted into a session cookie on this device. It is never written to the
-            database.
+            Read-only: nothing is ever written back to Jira. Revoke any time from your Atlassian
+            account settings.
           </p>
         </details>
       </div>

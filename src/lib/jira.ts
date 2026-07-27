@@ -1,4 +1,8 @@
-import type { Session } from "./session";
+/**
+ * Read directly rather than importing from ./atlassian, which is server-only —
+ * this module stays plain so its link parsing can be unit tested outside Next.
+ */
+const API_BASE = process.env.ATLASSIAN_API_BASE ?? "https://api.atlassian.com";
 
 export type JiraIssue = {
   key: string;
@@ -9,6 +13,12 @@ export type JiraIssue = {
   updatedAt: Date | null;
 };
 
+/** What a Jira call needs: an OAuth access token and which site to hit. */
+export type JiraAuth = {
+  accessToken: string;
+  cloudId: string;
+};
+
 export class JiraError extends Error {
   readonly status: number;
 
@@ -17,13 +27,6 @@ export class JiraError extends Error {
     this.name = "JiraError";
     this.status = status;
   }
-}
-
-/** Accepts a bare host, a full URL, or a URL with a path, and returns a clean origin. */
-export function normalizeSite(input: string): string {
-  const trimmed = input.trim().replace(/\/+$/, "");
-  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  return new URL(withScheme).origin;
 }
 
 /**
@@ -49,73 +52,26 @@ export function parseIssueKey(input: string): string | null {
   return null;
 }
 
-export function issueUrl(site: string, key: string): string {
-  return `${site}/browse/${key}`;
+export function issueUrl(siteUrl: string, key: string): string {
+  return `${siteUrl.replace(/\/+$/, "")}/browse/${key}`;
 }
 
-function authHeader(session: Pick<Session, "email" | "apiToken">): string {
-  const encoded = Buffer.from(`${session.email}:${session.apiToken}`).toString("base64");
-  return `Basic ${encoded}`;
-}
-
-async function jiraFetch(
-  session: Pick<Session, "site" | "email" | "apiToken">,
-  path: string,
-): Promise<Response> {
-  const response = await fetch(`${session.site}${path}`, {
+async function jiraFetch(auth: JiraAuth, path: string): Promise<Response> {
+  const response = await fetch(`${API_BASE}/ex/jira/${auth.cloudId}${path}`, {
     headers: {
-      Authorization: authHeader(session),
+      Authorization: `Bearer ${auth.accessToken}`,
       Accept: "application/json",
     },
     cache: "no-store",
   });
 
-  if (response.status === 401 || response.status === 403) {
-    throw new JiraError(
-      "Jira rejected these credentials. Check the email and API token.",
-      response.status,
-    );
+  if (response.status === 401) {
+    throw new JiraError("Your Jira authorization expired. Sign in again.", 401);
+  }
+  if (response.status === 403) {
+    throw new JiraError("This Jira grant is not allowed to read that issue.", 403);
   }
   return response;
-}
-
-export type JiraIdentity = {
-  accountId: string;
-  displayName: string;
-  emailAddress?: string;
-  avatarUrl?: string;
-};
-
-/** Verifies credentials and returns who they belong to. Used by the login form. */
-export async function verifyCredentials(
-  credentials: Pick<Session, "site" | "email" | "apiToken">,
-): Promise<JiraIdentity> {
-  const response = await jiraFetch(credentials, "/rest/api/3/myself");
-
-  if (!response.ok) {
-    throw new JiraError(
-      `Jira responded with ${response.status}. Confirm the site URL points at your Jira Cloud instance.`,
-      response.status,
-    );
-  }
-
-  const data = (await response.json()) as {
-    accountId?: string;
-    displayName?: string;
-    emailAddress?: string;
-    avatarUrls?: Record<string, string>;
-  };
-
-  if (!data.accountId) {
-    throw new JiraError("Jira did not return an account for these credentials.", 500);
-  }
-
-  return {
-    accountId: data.accountId,
-    displayName: data.displayName ?? credentials.email,
-    emailAddress: data.emailAddress,
-    avatarUrl: data.avatarUrls?.["48x48"],
-  };
 }
 
 type IssueResponse = {
@@ -129,13 +85,10 @@ type IssueResponse = {
 };
 
 /** Fetches one issue. Returns null when the issue does not exist or is not visible. */
-export async function fetchIssue(
-  session: Pick<Session, "site" | "email" | "apiToken">,
-  key: string,
-): Promise<JiraIssue | null> {
+export async function fetchIssue(auth: JiraAuth, key: string): Promise<JiraIssue | null> {
   const fields = "summary,updated,status,assignee";
   const response = await jiraFetch(
-    session,
+    auth,
     `/rest/api/3/issue/${encodeURIComponent(key)}?fields=${fields}`,
   );
 
@@ -162,7 +115,7 @@ export async function fetchIssue(
  * not open dozens of sockets at once. Missing issues are simply omitted.
  */
 export async function fetchIssues(
-  session: Pick<Session, "site" | "email" | "apiToken">,
+  auth: JiraAuth,
   keys: string[],
   concurrency = 6,
 ): Promise<Map<string, JiraIssue>> {
@@ -172,7 +125,7 @@ export async function fetchIssues(
   const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
     for (let key = queue.shift(); key; key = queue.shift()) {
       try {
-        const issue = await fetchIssue(session, key);
+        const issue = await fetchIssue(auth, key);
         if (issue) results.set(issue.key, issue);
       } catch (error) {
         // One unreachable issue should not abort the whole refresh.

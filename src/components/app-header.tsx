@@ -5,7 +5,7 @@ import { logout } from "@/lib/actions";
 import type { Session } from "@/lib/session";
 
 export function AppHeader({ session }: { session: Session }) {
-  const site = session.site.replace(/^https?:\/\//, "");
+  const site = (session.siteName ?? session.siteUrl ?? "").replace(/^https?:\/\//, "");
 
   return (
     <header className="border-b border-border bg-surface/70 backdrop-blur">

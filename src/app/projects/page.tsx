@@ -12,6 +12,7 @@ export const metadata: Metadata = { title: "Projects · Project Organizer" };
 export default async function ProjectsPage() {
   const session = await getSession();
   if (!session) redirect("/login");
+  if (!session.cloudId) redirect("/select-site");
 
   const projects = await listProjects(session);
 

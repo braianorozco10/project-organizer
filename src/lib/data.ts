@@ -15,6 +15,19 @@ export async function requireSession(): Promise<Session> {
   return session;
 }
 
+/** A session that has settled on a Jira site, so it can actually call the API. */
+export type ActiveSession = Session & { cloudId: string; siteUrl: string };
+
+export function hasSite(session: Session): session is ActiveSession {
+  return Boolean(session.cloudId && session.siteUrl);
+}
+
+export async function requireActiveSession(): Promise<ActiveSession> {
+  const session = await requireSession();
+  if (!hasSite(session)) throw new Error("NO_SITE_SELECTED");
+  return session;
+}
+
 export async function listProjects(session: Session): Promise<ProjectWithTasks[]> {
   const owner = ownerKey(session);
 
