@@ -69,10 +69,14 @@ export const tasks = pgTable(
     jiraUpdatedAt: timestamp("jira_updated_at", { withTimezone: true }),
     /** Manual 0–100 progress, the one column Jira does not own. */
     completion: integer("completion").notNull().default(0),
+    /** Manual ordering within the project; gaps are fine, ties fall back to createdAt. */
+    position: integer("position").notNull().default(0),
+    /** Indent level, 0–3. Purely visual — it suggests a sub-task, nothing rolls up. */
+    depth: integer("depth").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("tasks_project_idx").on(table.projectId, table.createdAt),
+    index("tasks_project_idx").on(table.projectId, table.position, table.createdAt),
     uniqueIndex("tasks_project_issue_idx").on(table.projectId, table.issueKey),
   ],
 );

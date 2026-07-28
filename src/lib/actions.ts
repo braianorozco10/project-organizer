@@ -2,7 +2,7 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
-import { and, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "./db";
@@ -10,6 +10,7 @@ import { projects, tasks } from "./db/schema";
 import { requireActiveSession, requireSession } from "./data";
 import { JiraError, fetchIssue, fetchIssues, issueUrl, parseIssueKey } from "./jira";
 import { pgConstraint, pgErrorCode } from "./pg-error";
+import { normalizeDepths } from "./task-order";
 import { destroySession, ownerKey, selectSite } from "./session";
 
 export type ActionState = { error?: string; message?: string };
@@ -148,8 +149,14 @@ export async function addTask(
   // The pasted link may point at a board view; store the canonical browse URL.
   const url = /^https?:\/\//i.test(input) ? input : issueUrl(session.siteUrl, issue.key);
 
+  const [{ highest } = { highest: null }] = await db
+    .select({ highest: max(tasks.position) })
+    .from(tasks)
+    .where(eq(tasks.projectId, projectId));
+
   try {
     await db.insert(tasks).values({
+      position: (highest ?? 0) + 1,
       projectId,
       issueKey: issue.key,
       url,
@@ -202,6 +209,54 @@ export async function deleteTask(taskId: string): Promise<void> {
 
   await db.delete(tasks).where(eq(tasks.id, taskId));
   refresh();
+}
+
+/**
+ * Persists a whole new order in one call: the client sends the rows as they now
+ * appear, and positions are rewritten to match. Depths are clamped so a row can
+ * only ever be one level deeper than the row above it — otherwise an indent can
+ * end up orphaned under nothing, which reads as a rendering bug.
+ */
+export async function reorderTasks(
+  projectId: string,
+  ordering: { id: string; depth: number }[],
+): Promise<ActionState> {
+  if (!uuidSchema.safeParse(projectId).success) return fail("Unknown project.");
+  if (ordering.length === 0) return {};
+  if (ordering.some((entry) => !uuidSchema.safeParse(entry.id).success)) {
+    return fail("Unknown task.");
+  }
+
+  await assertProjectOwner(projectId);
+
+  const existing = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(eq(tasks.projectId, projectId));
+
+  // Never trust the client with the membership of the list.
+  const owned = new Set(existing.map((row) => row.id));
+  if (ordering.length !== owned.size || ordering.some((entry) => !owned.has(entry.id))) {
+    return fail("That ordering does not match this project.");
+  }
+
+  const normalized = normalizeDepths(ordering).map((entry, index) => ({
+    id: entry.id,
+    position: index + 1,
+    depth: entry.depth,
+  }));
+
+  await Promise.all(
+    normalized.map((entry) =>
+      db
+        .update(tasks)
+        .set({ position: entry.position, depth: entry.depth })
+        .where(and(eq(tasks.id, entry.id), eq(tasks.projectId, projectId))),
+    ),
+  );
+
+  refresh();
+  return {};
 }
 
 /** Re-pulls title, status, assignee and last-updated for every ticket in a project. */

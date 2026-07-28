@@ -69,3 +69,20 @@ input[type="number"] {
   background: var(--accent);
   color: var(--surface);
 }
+
+/*
+ * Image export swaps the table into a static form for the moment of capture:
+ * drag handles and buttons disappear, and the completion slider is replaced by
+ * a plain bar, so the PNG reads as a report rather than a screenshot of a UI.
+ */
+[data-export-only] {
+  display: none;
+}
+
+.exporting [data-export-hide] {
+  display: none !important;
+}
+
+.exporting [data-export-only] {
+  display: flex;
+}

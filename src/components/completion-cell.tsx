@@ -34,35 +34,42 @@ export function CompletionCell({ taskId, value }: { taskId: string; value: numbe
 
   return (
     <div className="flex items-center gap-2.5">
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={5}
-        value={draft}
-        aria-label="Completion percentage"
-        onChange={(event) => commit(Number(event.target.value))}
-        className="h-1.5 w-24 cursor-pointer accent-[var(--accent)]"
-      />
-      <div className="flex items-center gap-0.5">
+      <div className="flex items-center gap-2.5" data-export-hide>
         <input
-          type="number"
+          type="range"
           min={0}
           max={100}
+          step={5}
           value={draft}
-          aria-label="Completion percentage, exact"
+          aria-label="Completion percentage"
           onChange={(event) => commit(Number(event.target.value))}
-          className="w-11 rounded-md border border-border bg-background px-1.5 py-1 text-right text-sm tabular-nums outline-none focus:border-accent"
+          className="h-1.5 w-24 cursor-pointer accent-[var(--accent)]"
         />
-        <span className="text-xs text-muted">%</span>
+        <div className="flex items-center gap-0.5">
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={draft}
+            aria-label="Completion percentage, exact"
+            onChange={(event) => commit(Number(event.target.value))}
+            className="w-11 rounded-md border border-border bg-background px-1.5 py-1 text-right text-sm tabular-nums outline-none focus:border-accent"
+          />
+          <span className="text-xs text-muted">%</span>
+        </div>
+        <span
+          aria-live="polite"
+          className={`text-xs text-muted transition-opacity ${pending ? "opacity-100" : "opacity-0"}`}
+        >
+          saving…
+        </span>
       </div>
-      <span
-        aria-live="polite"
-        className={`text-xs text-muted transition-opacity ${pending ? "opacity-100" : "opacity-0"}`}
-      >
-        saving…
-      </span>
-      <ProgressBar value={draft} className="sr-only" />
+
+      {/* Static stand-in used only while rendering the PNG export. */}
+      <div className="w-40 items-center gap-2.5" data-export-only>
+        <ProgressBar value={draft} className="flex-1" />
+        <span className="w-9 text-right text-xs tabular-nums">{draft}%</span>
+      </div>
     </div>
   );
 }

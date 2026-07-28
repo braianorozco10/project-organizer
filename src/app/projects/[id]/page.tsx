@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { AddTask } from "@/components/add-task";
 import { AppHeader } from "@/components/app-header";
+import { ExportMenu } from "@/components/export-menu";
 import { ProgressBar } from "@/components/progress-bar";
 import { ProjectSettings } from "@/components/project-settings";
 import { RefreshButton } from "@/components/refresh-button";
@@ -75,11 +76,19 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
         <div className="mt-8 space-y-4">
           <AddTask projectId={project.id} />
-          <RefreshButton projectId={project.id} />
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <RefreshButton projectId={project.id} />
+            <ExportMenu projectId={project.id} projectName={project.name} />
+          </div>
         </div>
 
         <div className="mt-6">
-          <TaskTable tasks={project.tasks} />
+          <TaskTable
+            projectId={project.id}
+            projectName={project.name}
+            progress={progress}
+            tasks={project.tasks}
+          />
         </div>
       </main>
     </div>

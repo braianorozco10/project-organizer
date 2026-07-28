@@ -36,7 +36,7 @@ export async function listProjects(session: Session): Promise<ProjectWithTasks[]
     .from(projects)
     .leftJoin(tasks, eq(tasks.projectId, projects.id))
     .where(eq(projects.ownerKey, owner))
-    .orderBy(desc(projects.createdAt), asc(tasks.createdAt));
+    .orderBy(desc(projects.createdAt), asc(tasks.position), asc(tasks.createdAt));
 
   const byId = new Map<string, ProjectWithTasks>();
   for (const row of rows) {
@@ -67,7 +67,7 @@ export async function getProject(
     .select()
     .from(tasks)
     .where(eq(tasks.projectId, project.id))
-    .orderBy(asc(tasks.createdAt));
+    .orderBy(asc(tasks.position), asc(tasks.createdAt));
 
   return { ...project, tasks: rows };
 }
